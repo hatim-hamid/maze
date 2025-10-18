@@ -18,7 +18,8 @@
         .maze-cell { 
             width: 20px; 
             height: 20px; 
-            border: 0.5px solid #d1d5db; 
+            border: 0.5px solid #d1d5db;
+            position: relative;
         }
         .maze-wall { 
             background-color: #374151; 
@@ -39,9 +40,11 @@
         }
         .maze-player { 
             border-radius: 50%; 
-            transform: scale(0.8);
             box-shadow: 0 0 10px rgba(0,0,0,0.5);
             animation: playerPulse 1s ease-in-out infinite;
+            position: absolute;
+            width: 16px;
+            height: 16px;
         }
         @keyframes pulseGreen {
             0%, 100% { box-shadow: 0 0 8px #10b981; }
@@ -52,8 +55,8 @@
             50% { box-shadow: 0 0 15px #ef4444; }
         }
         @keyframes playerPulse {
-            0%, 100% { transform: scale(0.8); }
-            50% { transform: scale(0.9); }
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.1); }
         }
         .player-badge { display: inline-block; padding: 0.5rem 1rem; border-radius: 9999px; font-weight: 600; margin: 0.25rem; }
         .current-turn { animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.5); }
@@ -238,7 +241,6 @@
             showScreen(gameScreen);
             
             if (state.game_mode === "turn_based") {
-                // Turn-based mode display
                 if (state.current_player) {
                     const playerData = state.player_colors[state.current_player];
                     const playerPoints = state.player_points[state.current_player] || 0;
@@ -247,7 +249,6 @@
                 }
                 movesInfo.textContent = `Moves Remaining: ${state.moves_remaining}`;
             } else {
-                // Race mode display
                 currentPlayerInfo.innerHTML = '🏁 RACE MODE - Everyone plays at once! 🏁';
                 currentPlayerInfo.style.color = '#667eea';
                 movesInfo.textContent = '';
@@ -290,41 +291,72 @@
                     const cellDiv = document.createElement('div');
                     cellDiv.className = 'maze-cell';
                     
-                    // Check for player positions
-                    let playerAtThisCell = null;
+                    // Find all players at this position
+                    let playersHere = [];
                     
                     if (state.game_mode === "turn_based") {
                         if (state.current_position && state.current_position[0] === rowIndex && state.current_position[1] === colIndex) {
-                            const currentPlayer = state.player_colors[state.current_player];
-                            cellDiv.classList.add('maze-player');
-                            cellDiv.style.backgroundColor = currentPlayer.color;
+                            playersHere.push({
+                                name: state.current_player,
+                                color: state.player_colors[state.current_player]?.color
+                            });
                         }
                     } else {
-                        // Race mode - show all player positions
+                        // Race mode - check all player positions
                         for (const [playerName, pos] of Object.entries(state.player_positions || {})) {
                             if (pos[0] === rowIndex && pos[1] === colIndex) {
-                                playerAtThisCell = playerName;
-                                break;
+                                playersHere.push({
+                                    name: playerName,
+                                    color: state.player_colors[playerName]?.color
+                                });
                             }
-                        }
-                        
-                        if (playerAtThisCell) {
-                            const playerColor = state.player_colors[playerAtThisCell].color;
-                            cellDiv.classList.add('maze-player');
-                            cellDiv.style.backgroundColor = playerColor;
                         }
                     }
                     
-                    if (!playerAtThisCell) {
-                        if (state.start_position && state.start_position[0] === rowIndex && state.start_position[1] === colIndex) {
-                            cellDiv.classList.add('maze-start');
-                        } else if (state.end_position && state.end_position[0] === rowIndex && state.end_position[1] === colIndex) {
-                            cellDiv.classList.add('maze-end');
-                        } else if (cell === 1) {
-                            cellDiv.classList.add('maze-wall');
-                        } else {
-                            cellDiv.classList.add('maze-path');
-                        }
+                    // Render base cell
+                    if (state.start_position && state.start_position[0] === rowIndex && state.start_position[1] === colIndex) {
+                        cellDiv.classList.add('maze-start');
+                    } else if (state.end_position && state.end_position[0] === rowIndex && state.end_position[1] === colIndex) {
+                        cellDiv.classList.add('maze-end');
+                    } else if (cell === 1) {
+                        cellDiv.classList.add('maze-wall');
+                    } else {
+                        cellDiv.classList.add('maze-path');
+                    }
+                    
+                    // Add player balls on top
+                    if (playersHere.length > 0) {
+                        playersHere.forEach((player, index) => {
+                            const playerBall = document.createElement('div');
+                            playerBall.className = 'maze-player';
+                            playerBall.style.backgroundColor = player.color;
+                            
+                            // Position multiple players in a grid pattern
+                            if (playersHere.length === 1) {
+                                playerBall.style.left = '2px';
+                                playerBall.style.top = '2px';
+                            } else if (playersHere.length === 2) {
+                                playerBall.style.left = index === 0 ? '0px' : '4px';
+                                playerBall.style.top = '2px';
+                                playerBall.style.width = '14px';
+                                playerBall.style.height = '14px';
+                            } else if (playersHere.length === 3) {
+                                const positions = [[0, 0], [4, 0], [2, 4]];
+                                playerBall.style.left = positions[index][0] + 'px';
+                                playerBall.style.top = positions[index][1] + 'px';
+                                playerBall.style.width = '12px';
+                                playerBall.style.height = '12px';
+                            } else {
+                                const positions = [[0, 0], [4, 0], [0, 4], [4, 4]];
+                                const pos = positions[index % 4];
+                                playerBall.style.left = pos[0] + 'px';
+                                playerBall.style.top = pos[1] + 'px';
+                                playerBall.style.width = '10px';
+                                playerBall.style.height = '10px';
+                            }
+                            
+                            cellDiv.appendChild(playerBall);
+                        });
                     }
                     
                     mazeGrid.appendChild(cellDiv);
