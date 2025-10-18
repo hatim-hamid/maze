@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Maze - Find Your Way Out - Host</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.5/socket.io.min.js"></script>
+    <style>
+        body { font-family: 'Inter', sans-serif; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
+        .card { background-color: white; border-radius: 1rem; padding: 2rem; box-shadow: 0 10px 25px rgba(0,0,0,0.2); }
+        .btn { padding: 0.75rem 1.5rem; border-radius: 0.5rem; font-weight: 600; transition: all 0.3s; }
+        .btn-primary { background-color: #667eea; color: white; }
+        .btn-primary:hover { background-color: #5568d3; }
+        .btn-danger { background-color: #ef4444; color: white; }
+        .btn-danger:hover { background-color: #dc2626; }
+        .btn:disabled { background-color: #9ca3af; cursor: not-allowed; }
+        .maze-cell { 
+            width: 20px; 
+            height: 20px; 
+            border: 0.5px solid #d1d5db; 
+        }
+        .maze-wall { 
+            background-color: #374151; 
+            border-color: #1f2937;
+        }
+        .maze-path { 
+            background-color: #ffffff; 
+        }
+        .maze-start { 
+            background-color: #10b981; 
+            box-shadow: 0 0 8px #10b981;
+            animation: pulseGreen 2s ease-in-out infinite;
+        }
+        .maze-end { 
+            background-color: #ef4444; 
+            box-shadow: 0 0 8px #ef4444;
+            animation: pulseRed 2s ease-in-out infinite;
+        }
+        .maze-player { 
+            border-radius: 50%; 
+            transform: scale(0.8);
+            box-shadow: 0 0 10px rgba(0,0,0,0.5);
+            animation: playerPulse 1s ease-in-out infinite;
+        }
+        @keyframes pulseGreen {
+            0%, 100% { box-shadow: 0 0 8px #10b981; }
+            50% { box-shadow: 0 0 15px #10b981; }
+        }
+        @keyframes pulseRed {
+            0%, 100% { box-shadow: 0 0 8px #ef4444; }
+            50% { box-shadow: 0 0 15px #ef4444; }
+        }
+        @keyframes playerPulse {
+            0%, 100% { transform: scale(0.8); }
+            50% { transform: scale(0.9); }
+        }
+        .player-badge { display: inline-block; padding: 0.5rem 1rem; border-radius: 9999px; font-weight: 600; margin: 0.25rem; }
+        .current-turn { animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.5); }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: .7; }
+        }
+    </style>
+</head>
+<body class="min-h-screen flex items-center justify-center p-4">
+    <div class="w-full max-w-7xl">
+        <!-- Setup Screen -->
+        <div id="setup-screen" class="text-center">
+            <h1 class="text-6xl font-bold text-white mb-8">🧩 Maze - Find Your Way Out!</h1>
+            <div class="card max-w-md mx-auto">
+                <h2 class="text-2xl font-bold mb-6">Game Settings</h2>
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-left font-semibold mb-2">Game Mode</label>
+                        <select id="game-mode" class="w-full p-2 border rounded">
+                            <option value="turn_based">Turn-Based (Classic)</option>
+                            <option value="race">Race Mode (Everyone plays at once!)</option>
+                        </select>
+                        <p class="text-xs text-gray-600 mt-1 text-left">Race Mode: All players move simultaneously!</p>
+                    </div>
+                    <div>
+                        <label class="block text-left font-semibold mb-2">Moves Per Turn</label>
+                        <select id="moves-per-turn" class="w-full p-2 border rounded">
+                            <option value="5" selected>5 moves</option>
+                            <option value="10">10 moves</option>
+                            <option value="15">15 moves</option>
+                            <option value="20">20 moves</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-left font-semibold mb-2">Maze Size</label>
+                        <select id="maze-size" class="w-full p-2 border rounded">
+                            <option value="15">Small (15x15)</option>
+                            <option value="20" selected>Medium (20x20)</option>
+                            <option value="25">Large (25x25)</option>
+                            <option value="30">Extra Large (30x30)</option>
+                        </select>
+                    </div>
+                    <button id="create-lobby-btn" class="btn btn-primary w-full text-lg">Create Lobby</button>
+                </div>
+            </div>
+            
+            <div id="history-section" class="card max-w-2xl mx-auto mt-8 hidden">
+                <h3 class="text-2xl font-bold mb-4">🏆 Hall of Fame</h3>
+                <div id="history-list"></div>
+            </div>
+        </div>
+
+        <!-- Lobby Screen -->
+        <div id="lobby-screen" class="hidden">
+            <h1 class="text-5xl font-bold text-white text-center mb-8">Game Lobby</h1>
+            <div class="card text-center">
+                <h2 class="text-2xl font-semibold mb-4">Players join at:</h2>
+                <p id="join-url" class="text-xl font-mono bg-gray-100 p-4 rounded mb-6">...</p>
+                
+                <div id="players-list" class="flex flex-wrap justify-center gap-3 mb-6"></div>
+                <div id="no-players" class="text-gray-500 mb-6">Waiting for players...</div>
+                
+                <button id="start-game-btn" class="btn btn-primary text-xl" disabled>Start Game</button>
+                <p id="error-message" class="text-red-500 font-semibold mt-4"></p>
+            </div>
+        </div>
+
+        <!-- Game Screen -->
+        <div id="game-screen" class="hidden">
+            <div class="flex justify-between items-center mb-4">
+                <h1 class="text-4xl font-bold text-white">Maze Game</h1>
+                <button id="end-game-btn" class="btn btn-danger">End Game</button>
+            </div>
+            
+            <div class="grid grid-cols-1 lg:grid-cols-4 gap-4">
+                <!-- Maze Display -->
+                <div class="lg:col-span-3 card">
+                    <div id="current-player-info" class="text-center mb-4 text-xl font-bold"></div>
+                    <div id="moves-info" class="text-center mb-4 text-lg"></div>
+                    <div id="maze-container" class="overflow-auto flex justify-center">
+                        <div id="maze-grid" class="inline-block"></div>
+                    </div>
+                </div>
+                
+                <!-- Players Panel -->
+                <div class="card">
+                    <h2 class="text-2xl font-bold mb-4">Players</h2>
+                    <div id="game-players-list" class="space-y-3"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Game Over Screen -->
+        <div id="game-over-screen" class="hidden text-center">
+            <div class="card max-w-2xl mx-auto">
+                <h1 class="text-5xl font-bold mb-6">🎉 Game Over!</h1>
+                <div id="winner-announcement" class="text-3xl font-bold mb-8"></div>
+                <div id="final-scores-host" class="mb-6 p-4 bg-gray-100 rounded-lg"></div>
+                <button onclick="location.reload()" class="btn btn-primary text-xl">Play Again</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const socket = io();
+        
+        const setupScreen = document.getElementById('setup-screen');
+        const lobbyScreen = document.getElementById('lobby-screen');
+        const gameScreen = document.getElementById('game-screen');
+        const gameOverScreen = document.getElementById('game-over-screen');
+        const createLobbyBtn = document.getElementById('create-lobby-btn');
+        const startGameBtn = document.getElementById('start-game-btn');
+        const endGameBtn = document.getElementById('end-game-btn');
+        const joinUrl = document.getElementById('join-url');
+        const playersList = document.getElementById('players-list');
+        const noPlayers = document.getElementById('no-players');
+        const gamePlayersList = document.getElementById('game-players-list');
+        const mazeGrid = document.getElementById('maze-grid');
+        const currentPlayerInfo = document.getElementById('current-player-info');
+        const movesInfo = document.getElementById('moves-info');
+        const winnerAnnouncement = document.getElementById('winner-announcement');
+        const finalScoresHost = document.getElementById('final-scores-host');
+        const historySection = document.getElementById('history-section');
+        const historyList = document.getElementById('history-list');
+        
+        function showScreen(screen) {
+            [setupScreen, lobbyScreen, gameScreen, gameOverScreen].forEach(s => s.classList.add('hidden'));
+            screen.classList.remove('hidden');
+        }
+        
+        createLobbyBtn.addEventListener('click', () => {
+            showScreen(lobbyScreen);
+            joinUrl.textContent = `${window.location.origin}/player`;
+        });
+        
+        startGameBtn.addEventListener('click', () => {
+            const settings = {
+                moves_per_turn: document.getElementById('moves-per-turn').value,
+                maze_size: document.getElementById('maze-size').value,
+                game_mode: document.getElementById('game-mode').value
+            };
+            socket.emit('start_game', settings);
+        });
+        
+        endGameBtn.addEventListener('click', () => {
+            if (confirm('Are you sure you want to end the game?')) {
+                socket.emit('force_end_game');
+            }
+        });
+        
+        socket.on('game_update', (state) => {
+            if (!state.is_running) {
+                updateLobby(state);
+            } else {
+                updateGame(state);
+            }
+        });
+        
+        function updateLobby(state) {
+            playersList.innerHTML = '';
+            if (state.players.length === 0) {
+                noPlayers.style.display = 'block';
+                startGameBtn.disabled = true;
+            } else {
+                noPlayers.style.display = 'none';
+                startGameBtn.disabled = false;
+                
+                state.players.forEach(playerName => {
+                    const playerData = state.player_colors[playerName];
+                    const badge = document.createElement('span');
+                    badge.className = 'player-badge';
+                    badge.style.backgroundColor = playerData.color;
+                    badge.style.color = isLightColor(playerData.color) ? '#000' : '#fff';
+                    badge.textContent = playerName;
+                    playersList.appendChild(badge);
+                });
+            }
+        }
+        
+        function updateGame(state) {
+            showScreen(gameScreen);
+            
+            if (state.game_mode === "turn_based") {
+                // Turn-based mode display
+                if (state.current_player) {
+                    const playerData = state.player_colors[state.current_player];
+                    const playerPoints = state.player_points[state.current_player] || 0;
+                    currentPlayerInfo.innerHTML = `Current Turn: <span style="color: ${playerData.color}; font-size: 1.5em;">⬤</span> ${state.current_player} (${playerPoints} pts)`;
+                    currentPlayerInfo.style.color = playerData.color;
+                }
+                movesInfo.textContent = `Moves Remaining: ${state.moves_remaining}`;
+            } else {
+                // Race mode display
+                currentPlayerInfo.innerHTML = '🏁 RACE MODE - Everyone plays at once! 🏁';
+                currentPlayerInfo.style.color = '#667eea';
+                movesInfo.textContent = '';
+            }
+            
+            renderMaze(state);
+            
+            gamePlayersList.innerHTML = '';
+            state.players.forEach(playerName => {
+                const playerData = state.player_colors[playerName];
+                const playerPoints = state.player_points[playerName] || 0;
+                const isFinished = state.finished_players && state.finished_players.includes(playerName);
+                
+                let movesDisplay = '';
+                if (state.game_mode === "race") {
+                    const playerMoves = state.player_moves[playerName] || 0;
+                    movesDisplay = `<br><small>${playerMoves} moves left</small>`;
+                }
+                
+                const div = document.createElement('div');
+                div.className = 'player-badge' + 
+                    (playerName === state.current_player && state.game_mode === "turn_based" ? ' current-turn' : '') +
+                    (isFinished ? ' opacity-50' : '');
+                div.style.backgroundColor = playerData.color;
+                div.style.color = isLightColor(playerData.color) ? '#000' : '#fff';
+                div.innerHTML = `${playerName}<br><small>${playerPoints} pts</small>${movesDisplay}${isFinished ? '<br><small>FINISHED</small>' : ''}`;
+                gamePlayersList.appendChild(div);
+            });
+        }
+        
+        function renderMaze(state) {
+            if (!state.maze) return;
+            
+            mazeGrid.innerHTML = '';
+            mazeGrid.style.display = 'grid';
+            mazeGrid.style.gridTemplateColumns = `repeat(${state.maze[0].length}, 20px)`;
+            
+            state.maze.forEach((row, rowIndex) => {
+                row.forEach((cell, colIndex) => {
+                    const cellDiv = document.createElement('div');
+                    cellDiv.className = 'maze-cell';
+                    
+                    // Check for player positions
+                    let playerAtThisCell = null;
+                    
+                    if (state.game_mode === "turn_based") {
+                        if (state.current_position && state.current_position[0] === rowIndex && state.current_position[1] === colIndex) {
+                            const currentPlayer = state.player_colors[state.current_player];
+                            cellDiv.classList.add('maze-player');
+                            cellDiv.style.backgroundColor = currentPlayer.color;
+                        }
+                    } else {
+                        // Race mode - show all player positions
+                        for (const [playerName, pos] of Object.entries(state.player_positions || {})) {
+                            if (pos[0] === rowIndex && pos[1] === colIndex) {
+                                playerAtThisCell = playerName;
+                                break;
+                            }
+                        }
+                        
+                        if (playerAtThisCell) {
+                            const playerColor = state.player_colors[playerAtThisCell].color;
+                            cellDiv.classList.add('maze-player');
+                            cellDiv.style.backgroundColor = playerColor;
+                        }
+                    }
+                    
+                    if (!playerAtThisCell) {
+                        if (state.start_position && state.start_position[0] === rowIndex && state.start_position[1] === colIndex) {
+                            cellDiv.classList.add('maze-start');
+                        } else if (state.end_position && state.end_position[0] === rowIndex && state.end_position[1] === colIndex) {
+                            cellDiv.classList.add('maze-end');
+                        } else if (cell === 1) {
+                            cellDiv.classList.add('maze-wall');
+                        } else {
+                            cellDiv.classList.add('maze-path');
+                        }
+                    }
+                    
+                    mazeGrid.appendChild(cellDiv);
+                });
+            });
+        }
+        
+        socket.on('game_started', () => {
+            console.log('Game started!');
+        });
+        
+        socket.on('game_over', (data) => {
+            showScreen(gameOverScreen);
+            if (data.winner) {
+                winnerAnnouncement.textContent = `🏆 ${data.winner} wins! 🏆`;
+            } else if (data.forced) {
+                winnerAnnouncement.textContent = 'Game ended by host';
+            } else {
+                winnerAnnouncement.textContent = 'Game Over';
+            }
+            
+            if (data.final_scores) {
+                let scoresHTML = '<h3 class="font-bold text-xl mb-3">Final Scores:</h3><div class="space-y-2">';
+                const sortedScores = Object.entries(data.final_scores).sort((a, b) => b[1] - a[1]);
+                sortedScores.forEach(([name, points], index) => {
+                    const medal = index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : '';
+                    scoresHTML += `<div class="flex justify-between text-lg py-2 px-4 bg-white rounded"><span>${medal} ${name}</span><span class="font-bold">${points} pts</span></div>`;
+                });
+                scoresHTML += '</div>';
+                finalScoresHost.innerHTML = scoresHTML;
+            }
+            
+            loadHistory();
+        });
+        
+        socket.on('game_error', (data) => {
+            document.getElementById('error-message').textContent = data.message;
+        });
+        
+        function isLightColor(color) {
+            const hex = color.replace('#', '');
+            const r = parseInt(hex.substr(0, 2), 16);
+            const g = parseInt(hex.substr(2, 2), 16);
+            const b = parseInt(hex.substr(4, 2), 16);
+            const brightness = (r * 299 + g * 587 + b * 114) / 1000;
+            return brightness > 155;
+        }
+        
+        async function loadHistory() {
+            try {
+                const response = await fetch('/api/history');
+                const players = await response.json();
+                if (players.length > 0) {
+                    historySection.classList.remove('hidden');
+                    historyList.innerHTML = `
+                        <table class="w-full">
+                            <thead>
+                                <tr class="border-b">
+                                    <th class="p-2 text-left">Rank</th>
+                                    <th class="p-2 text-left">Player</th>
+                                    <th class="p-2 text-right">Wins</th>
+                                    <th class="p-2 text-right">Games</th>
+                                    <th class="p-2 text-right">Total Points</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${players.map((p, i) => `
+                                    <tr class="border-b">
+                                        <td class="p-2 font-bold">#${i + 1}</td>
+                                        <td class="p-2">${p.name}</td>
+                                        <td class="p-2 text-right">${p.games_won}</td>
+                                        <td class="p-2 text-right">${p.games_played}</td>
+                                        <td class="p-2 text-right font-bold">${p.total_points}</td>
+                                    </tr>
+                                `).join('')}
+                            </tbody>
+                        </table>
+                    `;
+                }
+            } catch (error) {
+                console.error('Failed to load history:', error);
+            }
+        }
+        
+        window.onload = loadHistory;
+    </script>
+</body>
+</html>

@@ -1,0 +1,499 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Maze - Player</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.5/socket.io.min.js"></script>
+    <style>
+        body { font-family: 'Inter', sans-serif; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
+        .card { background-color: white; border-radius: 1rem; padding: 1.5rem; box-shadow: 0 10px 25px rgba(0,0,0,0.2); }
+        .btn { padding: 0.75rem 1.5rem; border-radius: 0.5rem; font-weight: 600; transition: all 0.3s; }
+        .btn-primary { background-color: #667eea; color: white; }
+        .btn-primary:hover { background-color: #5568d3; }
+        .btn-success { background-color: #10b981; color: white; }
+        .btn-success:hover { background-color: #059669; }
+        .btn-danger { background-color: #ef4444; color: white; }
+        .btn-danger:hover { background-color: #dc2626; }
+        .btn-warning { background-color: #f59e0b; color: white; }
+        .btn-warning:hover { background-color: #d97706; }
+        .btn:disabled { background-color: #9ca3af; cursor: not-allowed; }
+        .maze-cell { 
+            width: 25px; 
+            height: 25px; 
+            border: 0.5px solid #d1d5db; 
+        }
+        .maze-wall { 
+            background-color: #374151; 
+            border-color: #1f2937;
+        }
+        .maze-path { 
+            background-color: #ffffff; 
+            cursor: pointer; 
+        }
+        .maze-path:hover { 
+            background-color: #e0f2fe; 
+        }
+        .maze-start { 
+            background-color: #10b981; 
+            box-shadow: 0 0 8px #10b981;
+        }
+        .maze-end { 
+            background-color: #ef4444; 
+            box-shadow: 0 0 8px #ef4444;
+            cursor: pointer;
+        }
+        .maze-end:hover {
+            background-color: #dc2626;
+        }
+        .maze-player { 
+            border-radius: 50%; 
+            transform: scale(0.8);
+            box-shadow: 0 0 10px rgba(0,0,0,0.5);
+        }
+        .input-field { width: 100%; padding: 0.75rem; border-radius: 0.5rem; border: 1px solid #d1d5db; }
+        .points-display {
+            background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%);
+            color: white;
+            padding: 0.5rem 1rem;
+            border-radius: 0.5rem;
+            font-weight: bold;
+            font-size: 1.25rem;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex items-center justify-center p-4">
+    <div class="w-full max-w-2xl mx-auto">
+        <!-- Join Screen -->
+        <div id="join-screen" class="card text-center">
+            <h1 class="text-4xl font-bold mb-6">🧩 Join the Maze!</h1>
+            <input type="text" id="name-input" placeholder="Enter your name" class="input-field mb-4 text-center text-lg">
+            <button id="join-btn" class="btn btn-primary w-full text-lg">Join Game</button>
+            <p id="join-success" class="text-green-600 font-semibold mt-4 hidden">Waiting for host to start...</p>
+            <p id="join-error" class="text-red-500 font-semibold mt-4"></p>
+        </div>
+
+        <!-- Waiting Screen -->
+        <div id="waiting-screen" class="hidden card text-center">
+            <h1 class="text-3xl font-bold mb-4">Waiting...</h1>
+            <p id="waiting-message" class="text-xl text-gray-600"></p>
+            <div id="player-info" class="mt-6 p-4 bg-gray-100 rounded-lg"></div>
+        </div>
+
+        <!-- Game Screen -->
+        <div id="game-screen" class="hidden card">
+            <div class="text-center mb-4">
+                <div class="points-display mb-3">
+                    💰 Points: <span id="my-points">1000</span>
+                </div>
+                <h2 id="turn-status" class="text-2xl font-bold mb-2"></h2>
+                <p id="moves-remaining" class="text-lg font-semibold"></p>
+                <p id="game-mode-info" class="text-sm text-gray-600 mt-1"></p>
+            </div>
+            
+            <div id="maze-container" class="overflow-auto mb-4">
+                <div id="maze-grid" class="inline-block mx-auto"></div>
+            </div>
+            
+            <div id="move-feedback" class="text-center font-semibold mb-2 h-6"></div>
+            
+            <div class="text-center text-sm text-gray-600">
+                <p>Tap on the maze to move in a straight line</p>
+                <p class="mt-1">You have <span id="moves-count" class="font-bold"></span> moves remaining</p>
+                <p class="mt-1 text-xs">Cost: 10 points per move | Invalid moves also cost points!</p>
+            </div>
+            
+            <div id="finished-message" class="hidden mt-4 p-4 bg-yellow-100 rounded-lg text-center">
+                <p class="font-bold text-yellow-800">You have finished or quit this game</p>
+            </div>
+        </div>
+
+        <!-- Buy Moves Modal -->
+        <div id="buy-moves-modal" class="hidden fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center p-4 z-50">
+            <div class="card text-center max-w-sm">
+                <h2 class="text-2xl font-bold mb-4">Out of Moves! 🎯</h2>
+                <p class="text-lg mb-4">Buy extra moves for <span class="font-bold text-red-600">100 points</span> each</p>
+                <p class="text-sm text-gray-600 mb-2">Current Points: <span id="modal-points" class="font-bold">0</span></p>
+                <p class="text-sm text-gray-600 mb-4">Max moves you can buy: <span id="max-moves" class="font-bold">0</span></p>
+                
+                <div class="mb-4">
+                    <label class="block text-left font-semibold mb-2">How many moves?</label>
+                    <input type="number" id="moves-to-buy" min="1" value="1" class="w-full p-2 border rounded text-center text-lg">
+                </div>
+                
+                <div class="flex gap-3">
+                    <button id="buy-yes-btn" class="btn btn-success flex-1">Buy Moves</button>
+                    <button id="buy-no-btn" class="btn btn-danger flex-1">No Thanks</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Quit Modal -->
+        <div id="quit-modal" class="hidden fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center p-4 z-50">
+            <div class="card text-center max-w-sm">
+                <h2 class="text-2xl font-bold mb-4">Out of Moves & Points! 😔</h2>
+                <p class="text-lg mb-4">You can't buy more moves.</p>
+                <p class="text-sm text-gray-600 mb-6">Do you want to quit this game?</p>
+                <div class="flex gap-3">
+                    <button id="quit-yes-btn" class="btn btn-danger flex-1">Quit Game</button>
+                    <button id="quit-no-btn" class="btn btn-warning flex-1">Keep Watching</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Game Over Screen -->
+        <div id="game-over-screen" class="hidden card text-center">
+            <h1 class="text-4xl font-bold mb-6">Game Over!</h1>
+            <p id="result-message" class="text-2xl mb-4"></p>
+            <div id="final-scores" class="mb-6 p-4 bg-gray-100 rounded-lg"></div>
+            <button onclick="location.reload()" class="btn btn-primary text-lg">Play Again</button>
+        </div>
+    </div>
+
+    <script>
+        const socket = io({
+            reconnection: true,
+            reconnectionDelay: 1000,
+            reconnectionAttempts: 10,
+            transports: ['websocket', 'polling']
+        });
+        
+        let myName = '';
+        let myColor = '';
+        let isMyTurn = false;
+        let gameMode = 'turn_based';
+        let hasFinished = false;
+        
+        const joinScreen = document.getElementById('join-screen');
+        const waitingScreen = document.getElementById('waiting-screen');
+        const gameScreen = document.getElementById('game-screen');
+        const gameOverScreen = document.getElementById('game-over-screen');
+        const buyMovesModal = document.getElementById('buy-moves-modal');
+        const quitModal = document.getElementById('quit-modal');
+        const nameInput = document.getElementById('name-input');
+        const joinBtn = document.getElementById('join-btn');
+        const joinSuccess = document.getElementById('join-success');
+        const joinError = document.getElementById('join-error');
+        const waitingMessage = document.getElementById('waiting-message');
+        const playerInfo = document.getElementById('player-info');
+        const turnStatus = document.getElementById('turn-status');
+        const movesRemaining = document.getElementById('moves-remaining');
+        const movesCount = document.getElementById('moves-count');
+        const gameModeInfo = document.getElementById('game-mode-info');
+        const myPoints = document.getElementById('my-points');
+        const modalPoints = document.getElementById('modal-points');
+        const mazeGrid = document.getElementById('maze-grid');
+        const moveFeedback = document.getElementById('move-feedback');
+        const resultMessage = document.getElementById('result-message');
+        const finalScores = document.getElementById('final-scores');
+        const finishedMessage = document.getElementById('finished-message');
+        const buyYesBtn = document.getElementById('buy-yes-btn');
+        const buyNoBtn = document.getElementById('buy-no-btn');
+        const quitYesBtn = document.getElementById('quit-yes-btn');
+        const quitNoBtn = document.getElementById('quit-no-btn');
+        
+        function showScreen(screen) {
+            [joinScreen, waitingScreen, gameScreen, gameOverScreen].forEach(s => s.classList.add('hidden'));
+            screen.classList.remove('hidden');
+        }
+        
+        joinBtn.addEventListener('click', () => {
+            myName = nameInput.value.trim();
+            if (myName) {
+                socket.emit('join_game', { name: myName });
+            }
+        });
+        
+        nameInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                joinBtn.click();
+            }
+        });
+        
+        buyYesBtn.addEventListener('click', () => {
+            const numMoves = parseInt(document.getElementById('moves-to-buy').value) || 1;
+            const maxMoves = parseInt(document.getElementById('max-moves').textContent) || 1;
+            
+            if (numMoves > maxMoves) {
+                moveFeedback.textContent = 'Not enough points for that many moves!';
+                moveFeedback.style.color = '#ef4444';
+                setTimeout(() => moveFeedback.textContent = '', 2000);
+                return;
+            }
+            
+            if (numMoves < 1) {
+                moveFeedback.textContent = 'Must buy at least 1 move!';
+                moveFeedback.style.color = '#ef4444';
+                setTimeout(() => moveFeedback.textContent = '', 2000);
+                return;
+            }
+            
+            socket.emit('buy_moves', { buy: true, num_moves: numMoves });
+            buyMovesModal.classList.add('hidden');
+        });
+        
+        buyNoBtn.addEventListener('click', () => {
+            socket.emit('buy_moves', { buy: false, num_moves: 0 });
+            buyMovesModal.classList.add('hidden');
+        });
+        
+        quitYesBtn.addEventListener('click', () => {
+            socket.emit('quit_game');
+            quitModal.classList.add('hidden');
+            hasFinished = true;
+            finishedMessage.classList.remove('hidden');
+        });
+        
+        quitNoBtn.addEventListener('click', () => {
+            quitModal.classList.add('hidden');
+            hasFinished = true;
+            finishedMessage.classList.remove('hidden');
+        });
+        
+        socket.on('join_success', (data) => {
+            myName = data.name;
+            myColor = data.color;
+            joinBtn.textContent = 'Joined Game';
+            joinBtn.disabled = true;
+            joinBtn.classList.remove('btn-primary');
+            joinBtn.classList.add('btn');
+            nameInput.disabled = true;
+            joinSuccess.classList.remove('hidden');
+        });
+        
+        socket.on('join_error', (data) => {
+            joinError.textContent = data.message;
+            setTimeout(() => joinError.textContent = '', 3000);
+        });
+        
+        socket.on('game_started', () => {
+            console.log('Game started!');
+            hasFinished = false;
+            finishedMessage.classList.add('hidden');
+        });
+        
+        socket.on('game_update', (state) => {
+            if (!state.is_running) {
+                showScreen(waitingScreen);
+                waitingMessage.textContent = 'Waiting for host to start the game...';
+                if (myColor) {
+                    playerInfo.innerHTML = `Your color: <span style="color: ${myColor}; font-size: 2em;">⬤</span>`;
+                }
+            } else {
+                showScreen(gameScreen);
+                
+                gameMode = state.game_mode;
+                
+                if (state.player_points && state.player_points[myName] !== undefined) {
+                    myPoints.textContent = state.player_points[myName];
+                }
+                
+                if (state.finished_players && state.finished_players.includes(myName)) {
+                    hasFinished = true;
+                    finishedMessage.classList.remove('hidden');
+                }
+                
+                if (gameMode === "turn_based") {
+                    isMyTurn = (state.current_player === myName) && !hasFinished;
+                    
+                    if (isMyTurn) {
+                        turnStatus.textContent = "🎯 YOUR TURN!";
+                        turnStatus.style.color = myColor;
+                        movesRemaining.textContent = `Moves remaining: ${state.moves_remaining}`;
+                        movesCount.textContent = state.moves_remaining;
+                    } else {
+                        turnStatus.textContent = hasFinished ? "You have finished!" : `${state.current_player}'s turn`;
+                        turnStatus.style.color = '#6b7280';
+                        movesRemaining.textContent = hasFinished ? '' : 'Wait for your turn...';
+                        movesCount.textContent = '0';
+                    }
+                    gameModeInfo.textContent = '📋 Turn-Based Mode';
+                } else {
+                    isMyTurn = !hasFinished;
+                    
+                    const myMoves = state.player_moves[myName] || 0;
+                    
+                    if (hasFinished) {
+                        turnStatus.textContent = "You have finished!";
+                        turnStatus.style.color = '#6b7280';
+                        movesRemaining.textContent = '';
+                    } else {
+                        turnStatus.textContent = "🏁 RACE MODE - GO GO GO!";
+                        turnStatus.style.color = myColor;
+                        movesRemaining.textContent = `Your moves remaining: ${myMoves}`;
+                        movesCount.textContent = myMoves;
+                    }
+                    gameModeInfo.textContent = '🏁 Race Mode - Everyone plays at once!';
+                }
+                
+                renderMaze(state);
+            }
+        });
+        
+        function renderMaze(state) {
+            if (!state.maze) return;
+            
+            mazeGrid.innerHTML = '';
+            mazeGrid.style.display = 'grid';
+            mazeGrid.style.gridTemplateColumns = `repeat(${state.maze[0].length}, 25px)`;
+            
+            state.maze.forEach((row, rowIndex) => {
+                row.forEach((cell, colIndex) => {
+                    const cellDiv = document.createElement('div');
+                    cellDiv.className = 'maze-cell';
+                    cellDiv.dataset.row = rowIndex;
+                    cellDiv.dataset.col = colIndex;
+                    
+                    let hasPlayer = false;
+                    
+                    if (gameMode === "turn_based") {
+                        if (state.current_position && state.current_position[0] === rowIndex && state.current_position[1] === colIndex) {
+                            const currentPlayerColor = state.player_colors[state.current_player]?.color;
+                            cellDiv.classList.add('maze-player');
+                            cellDiv.style.backgroundColor = currentPlayerColor;
+                            hasPlayer = true;
+                        }
+                    } else {
+                        for (const [playerName, pos] of Object.entries(state.player_positions || {})) {
+                            if (pos[0] === rowIndex && pos[1] === colIndex) {
+                                const playerColor = state.player_colors[playerName]?.color;
+                                cellDiv.classList.add('maze-player');
+                                cellDiv.style.backgroundColor = playerColor;
+                                hasPlayer = true;
+                                break;
+                            }
+                        }
+                    }
+                    
+                    if (!hasPlayer) {
+                        if (state.start_position && state.start_position[0] === rowIndex && state.start_position[1] === colIndex) {
+                            cellDiv.classList.add('maze-start');
+                        } else if (state.end_position && state.end_position[0] === rowIndex && state.end_position[1] === colIndex) {
+                            cellDiv.classList.add('maze-end');
+                            
+                            if (isMyTurn) {
+                                cellDiv.addEventListener('click', () => {
+                                    makeMove(rowIndex, colIndex);
+                                });
+                            }
+                        } else if (cell === 1) {
+                            cellDiv.classList.add('maze-wall');
+                        } else {
+                            cellDiv.classList.add('maze-path');
+                            
+                            if (isMyTurn) {
+                                cellDiv.addEventListener('click', () => {
+                                    makeMove(rowIndex, colIndex);
+                                });
+                            }
+                        }
+                    }
+                    
+                    mazeGrid.appendChild(cellDiv);
+                });
+            });
+        }
+        
+        function makeMove(row, col) {
+            if (!isMyTurn || hasFinished) return;
+            
+            socket.emit('make_move', { position: [row, col] });
+        }
+        
+        socket.on('move_result', (data) => {
+            moveFeedback.textContent = data.message;
+            moveFeedback.style.color = data.valid ? '#10b981' : '#ef4444';
+            
+            setTimeout(() => {
+                moveFeedback.textContent = '';
+            }, 2000);
+        });
+        
+        socket.on('move_error', (data) => {
+            moveFeedback.textContent = data.message;
+            moveFeedback.style.color = '#ef4444';
+            
+            setTimeout(() => {
+                moveFeedback.textContent = '';
+            }, 2000);
+        });
+        
+        socket.on('offer_buy_moves', (data) => {
+            modalPoints.textContent = data.points;
+            document.getElementById('max-moves').textContent = data.max_moves;
+            document.getElementById('moves-to-buy').max = data.max_moves;
+            document.getElementById('moves-to-buy').value = Math.min(1, data.max_moves);
+            buyMovesModal.classList.remove('hidden');
+        });
+        
+        socket.on('offer_quit', (data) => {
+            quitModal.classList.remove('hidden');
+        });
+        
+        socket.on('buy_success', (data) => {
+            moveFeedback.textContent = data.message;
+            moveFeedback.style.color = '#10b981';
+            
+            setTimeout(() => {
+                moveFeedback.textContent = '';
+            }, 2000);
+        });
+        
+        socket.on('buy_error', (data) => {
+            moveFeedback.textContent = data.message;
+            moveFeedback.style.color = '#ef4444';
+            
+            setTimeout(() => {
+                moveFeedback.textContent = '';
+            }, 2000);
+        });
+        
+        socket.on('quit_success', (data) => {
+            moveFeedback.textContent = data.message;
+            moveFeedback.style.color = '#f59e0b';
+            hasFinished = true;
+            finishedMessage.classList.remove('hidden');
+        });
+        
+        socket.on('game_over', (data) => {
+            showScreen(gameOverScreen);
+            
+            if (data.winner === myName) {
+                resultMessage.innerHTML = `🎉 <span style="color: ${myColor};">YOU WIN!</span> 🎉`;
+            } else if (data.winner) {
+                resultMessage.textContent = `${data.winner} wins!`;
+            } else if (data.forced) {
+                resultMessage.textContent = 'Game ended by host';
+            } else {
+                resultMessage.textContent = 'Game Over';
+            }
+            
+            if (data.final_scores) {
+                let scoresHTML = '<h3 class="font-bold text-lg mb-2">Final Scores:</h3>';
+                Object.entries(data.final_scores).forEach(([name, points]) => {
+                    scoresHTML += `<div class="flex justify-between py-1"><span>${name}</span><span class="font-bold">${points} pts</span></div>`;
+                });
+                finalScores.innerHTML = scoresHTML;
+            }
+        });
+        
+        setInterval(() => {
+            if (socket.connected) {
+                socket.emit('ping');
+            }
+        }, 25000);
+        
+        socket.on('disconnect', (reason) => {
+            console.log('Disconnected:', reason);
+        });
+        
+        socket.on('reconnect', () => {
+            console.log('Reconnected');
+            if (myName) {
+                socket.emit('join_game', { name: myName });
+            }
+        });
+    </script>
+</body>
+</html>
