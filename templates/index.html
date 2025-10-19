@@ -85,10 +85,10 @@
                     <div>
                         <label class="block text-left font-semibold mb-2">Moves Per Turn</label>
                         <select id="moves-per-turn" class="w-full p-2 border rounded">
-                            <option value="20" selected>20 moves</option>
-                            <option value="30">30 moves</option>
-                            <option value="40">40 moves</option>
-                            <option value="50">50 moves</option>
+                            <option value="5" selected>5 moves</option>
+                            <option value="10">10 moves</option>
+                            <option value="15">15 moves</option>
+                            <option value="20">20 moves</option>
                         </select>
                     </div>
                     <div>
@@ -120,7 +120,10 @@
                 <div id="players-list" class="flex flex-wrap justify-center gap-3 mb-6"></div>
                 <div id="no-players" class="text-gray-500 mb-6">Waiting for players...</div>
                 
-                <button id="start-game-btn" class="btn btn-primary text-xl" disabled>Start Game</button>
+                <div class="flex gap-4 justify-center">
+                    <button id="start-game-btn" class="btn btn-primary text-xl" disabled>Start Game</button>
+                    <button id="restart-lobby-btn" class="btn btn-danger text-xl">Restart Lobby</button>
+                </div>
                 <p id="error-message" class="text-red-500 font-semibold mt-4"></p>
             </div>
         </div>
@@ -171,6 +174,7 @@
         const createLobbyBtn = document.getElementById('create-lobby-btn');
         const startGameBtn = document.getElementById('start-game-btn');
         const endGameBtn = document.getElementById('end-game-btn');
+        const restartLobbyBtn = document.getElementById('restart-lobby-btn');
         const joinUrl = document.getElementById('join-url');
         const playersList = document.getElementById('players-list');
         const noPlayers = document.getElementById('no-players');
@@ -205,6 +209,12 @@
         endGameBtn.addEventListener('click', () => {
             if (confirm('Are you sure you want to end the game?')) {
                 socket.emit('force_end_game');
+            }
+        });
+        
+        restartLobbyBtn.addEventListener('click', () => {
+            if (confirm('This will kick all players out and reset the lobby. Continue?')) {
+                socket.emit('restart_lobby');
             }
         });
         
@@ -291,7 +301,6 @@
                     const cellDiv = document.createElement('div');
                     cellDiv.className = 'maze-cell';
                     
-                    // Find all players at this position
                     let playersHere = [];
                     
                     if (state.game_mode === "turn_based") {
@@ -302,7 +311,6 @@
                             });
                         }
                     } else {
-                        // Race mode - check all player positions
                         for (const [playerName, pos] of Object.entries(state.player_positions || {})) {
                             if (pos[0] === rowIndex && pos[1] === colIndex) {
                                 playersHere.push({
@@ -313,7 +321,6 @@
                         }
                     }
                     
-                    // Render base cell
                     if (state.start_position && state.start_position[0] === rowIndex && state.start_position[1] === colIndex) {
                         cellDiv.classList.add('maze-start');
                     } else if (state.end_position && state.end_position[0] === rowIndex && state.end_position[1] === colIndex) {
@@ -324,14 +331,12 @@
                         cellDiv.classList.add('maze-path');
                     }
                     
-                    // Add player balls on top
                     if (playersHere.length > 0) {
                         playersHere.forEach((player, index) => {
                             const playerBall = document.createElement('div');
                             playerBall.className = 'maze-player';
                             playerBall.style.backgroundColor = player.color;
                             
-                            // Position multiple players in a grid pattern
                             if (playersHere.length === 1) {
                                 playerBall.style.left = '2px';
                                 playerBall.style.top = '2px';
@@ -394,6 +399,10 @@
         
         socket.on('game_error', (data) => {
             document.getElementById('error-message').textContent = data.message;
+        });
+        
+        socket.on('reload_host', () => {
+            location.reload();
         });
         
         function isLightColor(color) {

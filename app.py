@@ -21,14 +21,14 @@ socketio = SocketIO(app,
                     ping_interval=25)
 
 PLAYER_COLORS = [
-    {'color': '#9333EA', 'name': 'Black'},
+    {'color': '#EC4899', 'name': 'Black'},
     {'color': '#DC2626', 'name': 'Red'},
     {'color': '#2563EB', 'name': 'Blue'},
     {'color': '#16A34A', 'name': 'Green'},
     {'color': '#9333EA', 'name': 'Purple'},
     {'color': '#EAB308', 'name': 'Yellow'},
     {'color': '#EA580C', 'name': 'Orange'},
-    {'color': '#EC4899', 'name': 'Pink'},
+    {'color': '#14B8A6', 'name': 'Pink'},
     {'color': '#14B8A6', 'name': 'Teal'},
     {'color': '#84CC16', 'name': 'Lime'},
 ]
