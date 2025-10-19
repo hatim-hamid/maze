@@ -21,7 +21,7 @@ socketio = SocketIO(app,
                     ping_interval=25)
 
 PLAYER_COLORS = [
-    {'color': '#000000', 'name': 'Black'},
+    {'color': '#9333EA', 'name': 'Black'},
     {'color': '#DC2626', 'name': 'Red'},
     {'color': '#2563EB', 'name': 'Blue'},
     {'color': '#16A34A', 'name': 'Green'},
@@ -410,9 +410,9 @@ def handle_make_move(data):
         
         if game_state["moves_remaining"] <= 0:
             player_points = game_state["players"][player_name]['points']
-            max_moves = player_points // 100
+            max_moves = player_points // 50
             if max_moves > 0:
-                emit('offer_buy_moves', {'points': player_points, 'cost': 100, 'max_moves': max_moves})
+                emit('offer_buy_moves', {'points': player_points, 'cost': 50, 'max_moves': max_moves})
             else:
                 socketio.sleep(1)
                 next_turn()
@@ -450,9 +450,9 @@ def handle_make_move(data):
         
         if game_state["player_moves"][player_name] <= 0:
             player_points = game_state["players"][player_name]['points']
-            max_moves = player_points // 100
+            max_moves = player_points // 50
             if max_moves > 0:
-                emit('offer_buy_moves', {'points': player_points, 'cost': 100, 'max_moves': max_moves})
+                emit('offer_buy_moves', {'points': player_points, 'cost': 50, 'max_moves': max_moves})
             else:
                 emit('offer_quit', {'message': 'Out of moves and points!'})
 
@@ -469,7 +469,7 @@ def handle_buy_moves(data):
     
     if buy and num_moves > 0:
         player = game_state["players"][player_name]
-        total_cost = num_moves * 100
+        total_cost = num_moves * 50
         
         if player['points'] >= total_cost:
             player['points'] -= total_cost
