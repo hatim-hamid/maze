@@ -20,8 +20,8 @@
         .btn-warning:hover { background-color: #d97706; }
         .btn:disabled { background-color: #9ca3af; cursor: not-allowed; }
         .maze-cell { 
-            width: 25px; 
-            height: 25px; 
+            width: 100%;
+            aspect-ratio: 1;
             border: 0.5px solid #d1d5db; 
             position: relative;
         }
@@ -52,8 +52,8 @@
             border-radius: 50%; 
             box-shadow: 0 0 10px rgba(0,0,0,0.5);
             position: absolute;
-            width: 20px;
-            height: 20px;
+            width: 80%;
+            height: 80%;
         }
         .input-field { width: 100%; padding: 0.75rem; border-radius: 0.5rem; border: 1px solid #d1d5db; }
         .points-display {
@@ -339,7 +339,12 @@
             
             mazeGrid.innerHTML = '';
             mazeGrid.style.display = 'grid';
-            mazeGrid.style.gridTemplateColumns = `repeat(${state.maze[0].length}, 25px)`;
+
+            const mazeSize = state.maze[0].length;
+            const maxWidth = window.innerWidth - 100; // Leave some padding
+            const cellSize = Math.floor(maxWidth / mazeSize);
+            mazeGrid.style.gridTemplateColumns = `repeat(${mazeSize}, ${cellSize}px)`;
+            mazeGrid.style.maxWidth = `${cellSize * mazeSize}px`;
             
             state.maze.forEach((row, rowIndex) => {
                 row.forEach((cell, colIndex) => {
