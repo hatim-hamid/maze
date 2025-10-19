@@ -85,52 +85,74 @@ def get_history():
     } for p in players])
 
 def generate_maze(size):
-    """Generate a random maze with GUARANTEED path from start to end"""
+    """Generate a proper maze using Wilson's algorithm - creates perfect mazes"""
+    from collections import deque
+    
+    # Initialize all walls
     maze = [[1 for _ in range(size)] for _ in range(size)]
     
-    def carve_path(row, col):
-        maze[row][col] = 0
-        directions = [(0, 2), (2, 0), (0, -2), (-2, 0)]
-        random.shuffle(directions)
+    # Only work with odd coordinates to ensure walls between paths
+    cells = [(r, c) for r in range(1, size-1, 2) for c in range(1, size-1, 2)]
+    
+    if not cells:
+        return maze
+    
+    # Mark first cell as in maze
+    in_maze = {cells[0]}
+    maze[cells[0][0]][cells[0][1]] = 0
+    
+    # For each remaining cell
+    remaining = [c for c in cells if c not in in_maze]
+    
+    while remaining:
+        # Start random walk from random unvisited cell
+        current = random.choice(remaining)
+        path = [current]
         
-        for dr, dc in directions:
-            new_row, new_col = row + dr, col + dc
-            if 0 < new_row < size - 1 and 0 < new_col < size - 1 and maze[new_row][new_col] == 1:
-                maze[row + dr // 2][col + dc // 2] = 0
-                carve_path(new_row, new_col)
-    
-    carve_path(1, 1)
-    
-    start_row, start_col = 1, 1
-    end_row, end_col = size - 2, size - 2
-    
-    maze[start_row][start_col] = 0
-    maze[end_row][end_col] = 0
-    
-    def has_path():
-        from collections import deque
-        visited = set()
-        queue = deque([(start_row, start_col)])
-        visited.add((start_row, start_col))
-        
-        while queue:
-            r, c = queue.popleft()
-            if r == end_row and c == end_col:
-                return True
+        # Random walk until we hit the maze
+        while current not in in_maze:
+            # Choose random direction
+            directions = [(0, 2), (2, 0), (0, -2), (-2, 0)]
+            dr, dc = random.choice(directions)
+            next_r, next_c = current[0] + dr, current[1] + dc
             
-            for dr, dc in [(0, 1), (1, 0), (0, -1), (-1, 0)]:
-                nr, nc = r + dr, c + dc
-                if 0 < nr < size - 1 and 0 < nc < size - 1 and (nr, nc) not in visited and maze[nr][nc] == 0:
-                    visited.add((nr, nc))
-                    queue.append((nr, nc))
+            # Make sure we stay in bounds
+            if 1 <= next_r < size-1 and 1 <= next_c < size-1:
+                # Remove loops - if we've been here, cut the loop
+                if (next_r, next_c) in path:
+                    # Cut loop
+                    loop_start = path.index((next_r, next_c))
+                    path = path[:loop_start+1]
+                    current = path[-1]
+                else:
+                    path.append((next_r, next_c))
+                    current = (next_r, next_c)
         
-        return False
+        # Add path to maze
+        for i in range(len(path)):
+            r, c = path[i]
+            maze[r][c] = 0
+            in_maze.add((r, c))
+            
+            # Carve wall to previous cell
+            if i > 0:
+                prev_r, prev_c = path[i-1]
+                wall_r = (r + prev_r) // 2
+                wall_c = (c + prev_c) // 2
+                maze[wall_r][wall_c] = 0
+        
+        # Update remaining cells
+        remaining = [c for c in cells if c not in in_maze]
     
-    if not has_path():
-        maze[end_row - 1][end_col] = 0
-        maze[end_row][end_col - 1] = 0
-        maze[end_row - 2][end_col] = 0
-        maze[end_row][end_col - 2] = 0
+    # Ensure start and end are accessible
+    maze[1][1] = 0
+    maze[size-2][size-2] = 0
+    
+    # Make sure end cell is on odd coordinate, if not, open path to it
+    if (size-2) % 2 == 0:
+        maze[size-3][size-2] = 0
+    if (size-2) % 2 == 0:
+        maze[size-2][size-3] = 0
     
     return maze
 

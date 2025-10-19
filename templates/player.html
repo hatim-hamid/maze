@@ -339,9 +339,9 @@
             
             mazeGrid.innerHTML = '';
             mazeGrid.style.display = 'grid';
-
+            
             const mazeSize = state.maze[0].length;
-            const maxWidth = window.innerWidth - 100; // Leave some padding
+            const maxWidth = Math.min(window.innerWidth - 60, 700);
             const cellSize = Math.floor(maxWidth / mazeSize);
             mazeGrid.style.gridTemplateColumns = `repeat(${mazeSize}, ${cellSize}px)`;
             mazeGrid.style.maxWidth = `${cellSize * mazeSize}px`;
@@ -364,7 +364,6 @@
                             });
                         }
                     } else {
-                        // Race mode - check all player positions
                         for (const [playerName, pos] of Object.entries(state.player_positions || {})) {
                             if (pos[0] === rowIndex && pos[1] === colIndex) {
                                 playersHere.push({
@@ -383,7 +382,9 @@
                         
                         if (isMyTurn) {
                             cellDiv.addEventListener('click', () => {
-                                makeMove(rowIndex, colIndex);
+                                const row = parseInt(cellDiv.dataset.row);
+                                const col = parseInt(cellDiv.dataset.col);
+                                makeMove(row, col);
                             });
                         }
                     } else if (cell === 1) {
@@ -393,7 +394,9 @@
                         
                         if (isMyTurn) {
                             cellDiv.addEventListener('click', () => {
-                                makeMove(rowIndex, colIndex);
+                                const row = parseInt(cellDiv.dataset.row);
+                                const col = parseInt(cellDiv.dataset.col);
+                                makeMove(row, col);
                             });
                         }
                     }
@@ -405,28 +408,27 @@
                             playerBall.className = 'maze-player';
                             playerBall.style.backgroundColor = player.color;
                             
-                            // Position multiple players in a grid pattern
                             if (playersHere.length === 1) {
-                                playerBall.style.left = '2.5px';
-                                playerBall.style.top = '2.5px';
+                                playerBall.style.left = '10%';
+                                playerBall.style.top = '10%';
                             } else if (playersHere.length === 2) {
-                                playerBall.style.left = index === 0 ? '0px' : '5px';
-                                playerBall.style.top = '2.5px';
-                                playerBall.style.width = '18px';
-                                playerBall.style.height = '18px';
+                                playerBall.style.left = index === 0 ? '5%' : '45%';
+                                playerBall.style.top = '10%';
+                                playerBall.style.width = '40%';
+                                playerBall.style.height = '40%';
                             } else if (playersHere.length === 3) {
-                                const positions = [[0, 0], [5, 0], [2.5, 5]];
-                                playerBall.style.left = positions[index][0] + 'px';
-                                playerBall.style.top = positions[index][1] + 'px';
-                                playerBall.style.width = '15px';
-                                playerBall.style.height = '15px';
+                                const positions = [['5%', '5%'], ['45%', '5%'], ['25%', '45%']];
+                                playerBall.style.left = positions[index][0];
+                                playerBall.style.top = positions[index][1];
+                                playerBall.style.width = '35%';
+                                playerBall.style.height = '35%';
                             } else {
-                                const positions = [[0, 0], [5, 0], [0, 5], [5, 5]];
+                                const positions = [['5%', '5%'], ['45%', '5%'], ['5%', '45%'], ['45%', '45%']];
                                 const pos = positions[index % 4];
-                                playerBall.style.left = pos[0] + 'px';
-                                playerBall.style.top = pos[1] + 'px';
-                                playerBall.style.width = '12px';
-                                playerBall.style.height = '12px';
+                                playerBall.style.left = pos[0];
+                                playerBall.style.top = pos[1];
+                                playerBall.style.width = '30%';
+                                playerBall.style.height = '30%';
                             }
                             
                             cellDiv.appendChild(playerBall);
